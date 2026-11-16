@@ -1,0 +1,371 @@
+﻿@page "/administrar-fichajes"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrador")]
+
+@using Microsoft.EntityFrameworkCore
+@using NSControlHorario.Data
+@using NSControlHorarioApp.Models
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using NSControlHorarioApp.Services
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ModificacionFichajeService ModificacionFichajeService
+@inject ApplicationDbContext DbContext
+
+<PageTitle>Administrar fichajes</PageTitle>
+
+<h3>Administración de fichajes</h3>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <label>Empleado</label>
+        <select class="form-select" @bind="empleadoSeleccionado">
+            <option value="">Todos los empleados</option>
+            @foreach (var empleado in empleados)
+            {
+                <option value="@empleado.Id">
+                    @empleado.Nombre @empleado.Apellidos
+                </option>
+            }
+        </select>
+    </div>
+
+    <div class="col-md-3">
+        <label>Desde</label>
+        <input type="date" class="form-control" @bind="fechaDesde" />
+    </div>
+
+    <div class="col-md-3">
+        <label>Hasta</label>
+        <input type="date" class="form-control" @bind="fechaHasta" />
+    </div>
+
+    <div class="col-md-3 d-flex align-items-end gap-2">
+        <button class="btn btn-primary" @onclick="Buscar">
+            Buscar
+        </button>
+        <button class="btn btn-secondary" @onclick="Limpiar">
+            Limpiar
+        </button>
+    </div>
+</div>
+
+@if (fichajeEditando != null)
+{
+    <div class="card p-3 mb-3">
+        <h5>Modificar fichaje</h5>
+
+        <p>
+            <strong>Empleado:</strong>
+            @fichajeEditando.Usuario?.Nombre
+            @fichajeEditando.Usuario?.Apellidos
+        </p>
+
+        <div class="mb-3">
+            <label>Fecha y hora:</label>
+            <input type="datetime-local"
+                   class="form-control"
+                   @bind="fechaHoraEdicion" />
+        </div>
+
+        <div class="mb-3">
+            <label>Tipo:</label>
+            <select class="form-select" @bind="tipoEdicion">
+                <option value="@TipoFichaje.Entrada">Entrada</option>
+                <option value="@TipoFichaje.Salida">Salida</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label>Motivo de la modificación:</label>
+            <textarea class="form-control"
+                      maxlength="500"
+                      @bind="motivoEdicion"></textarea>
+        </div>
+
+        <button class="btn btn-primary"
+                @onclick="GuardarModificacion">
+            Guardar modificación
+        </button>
+
+        <button class="btn btn-secondary ms-2"
+                @onclick="CancelarEdicion">
+            Cancelar
+        </button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(mensaje))
+{
+    <div class="alert alert-info">@mensaje</div>
+}
+
+@if (cargando)
+{
+    <p>Consultando fichajes...</p>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+else
+{
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Empleado</th>
+                <th>Fecha y hora</th>
+                <th>Tipo</th>
+                <th>Acciones</th>
+                <th style="width: 90px; text-align: center;">Modificado</th>
+                <th>Motivo</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var fichaje in fichajes)
+            {
+                <tr>
+                    <td>@fichaje.Usuario?.Nombre @fichaje.Usuario?.Apellidos</td>
+                    <td>@ConvertirHoraMadrid(fichaje.FechaHoraUtc).ToString("dd/MM/yyyy HH:mm:ss")</td>
+                    <td>
+                        @if (fichaje.Tipo == TipoFichaje.Entrada)
+                        {
+                            <span class="badge bg-success">Entrada</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger">Salida</span>
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-warning"
+                                @onclick="() => EditarFichaje(fichaje)">
+                            Editar
+                        </button>
+                    </td>
+                    <td class="text-center" style="width: 90px;">
+                        <input type="checkbox"
+                               class="form-check-input"
+                               checked="@fichajesModificados.Contains(fichaje.Id)"
+                               disabled />
+                    </td>
+                    <td style="min-width: 300px;">
+                        @if (motivosUltimaModificacion.TryGetValue(fichaje.Id, out var motivo))
+                        {
+                            @motivo
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<ApplicationUser> empleados = new();
+    private List<Fichaje> fichajes = new();
+
+    private string empleadoSeleccionado = "";
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private bool cargando = true;
+    private string error = "";
+
+    private static readonly TimeZoneInfo ZonaMadrid =
+        TimeZoneInfo.FindSystemTimeZoneById("Romance Standard Time");
+
+    private string mensaje = "";
+
+    private Fichaje? fichajeEditando;
+    private DateTime fechaHoraEdicion;
+    private TipoFichaje tipoEdicion;
+    private string motivoEdicion = "";
+
+    private Dictionary<int, string> motivosUltimaModificacion = new();
+    private HashSet<int> fichajesModificados = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            empleados = await DbContext.Users
+                .OrderBy(u => u.Nombre)
+                .ToListAsync();
+
+            await Buscar();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task Buscar()
+    {
+        error = "";
+        cargando = true;
+
+        try
+        {
+            var consulta = DbContext.Fichajes
+                .Include(f => f.Usuario)
+                .AsQueryable();
+
+            if (!string.IsNullOrEmpty(empleadoSeleccionado))
+            {
+                consulta = consulta.Where(
+                    f => f.UserId == empleadoSeleccionado);
+            }
+
+            if (fechaDesde.HasValue)
+            {
+                var desdeMadrid = DateTime.SpecifyKind(
+                    fechaDesde.Value.Date,
+                    DateTimeKind.Unspecified);
+
+                var desdeUtc = TimeZoneInfo.ConvertTimeToUtc(
+                    desdeMadrid, ZonaMadrid);
+
+                consulta = consulta.Where(
+                    f => f.FechaHoraUtc >= desdeUtc);
+            }
+
+            if (fechaHasta.HasValue)
+            {
+                var hastaMadrid = DateTime.SpecifyKind(
+                    fechaHasta.Value.Date.AddDays(1),
+                    DateTimeKind.Unspecified);
+
+                var hastaUtc = TimeZoneInfo.ConvertTimeToUtc(
+                    hastaMadrid, ZonaMadrid);
+
+                consulta = consulta.Where(
+                    f => f.FechaHoraUtc < hastaUtc);
+            }
+
+            fichajes = await consulta
+                .OrderByDescending(f => f.FechaHoraUtc)
+                .Take(1000)
+                .ToListAsync();
+
+            // Consultar las modificaciones de los fichajes obtenidos.
+            var idsFichajes = fichajes.Select(f => f.Id).ToList();
+
+            var modificaciones = await DbContext.ModificacionesFichajes
+                .Where(m => idsFichajes.Contains(m.FichajeId))
+                .OrderByDescending(m => m.FechaModificacionUtc)
+                .ToListAsync();
+
+            motivosUltimaModificacion.Clear();
+            fichajesModificados.Clear();
+
+            foreach (var modificacion in modificaciones)
+            {
+                fichajesModificados.Add(modificacion.FichajeId);
+
+                if (!motivosUltimaModificacion.ContainsKey(modificacion.FichajeId))
+                {
+                    motivosUltimaModificacion.Add(
+                        modificacion.FichajeId,
+                        modificacion.Motivo);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task Limpiar()
+    {
+        empleadoSeleccionado = "";
+        fechaDesde = null;
+        fechaHasta = null;
+
+        await Buscar();
+    }
+
+    private static DateTime ConvertirHoraMadrid(DateTime fechaUtc)
+    {
+        fechaUtc = DateTime.SpecifyKind(
+            fechaUtc, DateTimeKind.Utc);
+
+        return TimeZoneInfo.ConvertTimeFromUtc(
+            fechaUtc, ZonaMadrid);
+    }
+
+    private void EditarFichaje(Fichaje fichaje)
+    {
+        fichajeEditando = fichaje;
+
+        fechaHoraEdicion = ConvertirHoraMadrid(
+            fichaje.FechaHoraUtc);
+
+        tipoEdicion = fichaje.Tipo;
+        motivoEdicion = "";
+        mensaje = "";
+    }
+
+    private void CancelarEdicion()
+    {
+        fichajeEditando = null;
+        motivoEdicion = "";
+    }
+
+    private async Task GuardarModificacion()
+    {
+        if (fichajeEditando == null)
+            return;
+
+        mensaje = "";
+
+        try
+        {
+            var fechaMadrid = DateTime.SpecifyKind(
+                fechaHoraEdicion,
+                DateTimeKind.Unspecified);
+
+            var fechaUtc = TimeZoneInfo.ConvertTimeToUtc(
+                fechaMadrid,
+                ZonaMadrid);
+
+            var estado = await AuthenticationStateProvider
+                .GetAuthenticationStateAsync();
+
+            var resultado = await ModificacionFichajeService.ModificarAsync(
+                estado.User,
+                fichajeEditando.Id,
+                fechaUtc,
+                tipoEdicion,
+                motivoEdicion);
+
+            mensaje = resultado.Mensaje;
+
+            if (resultado.Correcto)
+            {
+                fichajeEditando = null;
+                motivoEdicion = "";
+
+                await Buscar();
+            }
+        }
+        catch (Exception ex)
+        {
+            mensaje = "Error al modificar el fichaje: " + ex.Message;
+        }
+    }
+}

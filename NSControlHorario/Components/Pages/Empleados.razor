@@ -1,0 +1,189 @@
+﻿@page "/empleados"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using NSControlHorarioApp.Models
+@using NSControlHorarioApp.Services
+@attribute [Authorize(Roles = "Administrador")]
+@inject EmpleadoService EmpleadoService
+
+<PageTitle>Gestión de empleados</PageTitle>
+
+<h3>Gestión de empleados</h3>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="MostrarFormulario">
+        Nuevo empleado
+    </button>
+</div>
+
+@if (mostrarFormulario)
+{
+    <div class="card p-3 mb-4">
+        <h5>Nuevo empleado</h5>
+
+        <EditForm Model="nuevoEmpleado" OnValidSubmit="CrearEmpleado">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-2">
+                <label>Nombre</label>
+                <InputText class="form-control" @bind-Value="nuevoEmpleado.Nombre" />
+            </div>
+
+            <div class="mb-2">
+                <label>Apellidos</label>
+                <InputText class="form-control" @bind-Value="nuevoEmpleado.Apellidos" />
+            </div>
+
+            <div class="mb-2">
+                <label>DNI</label>
+                <InputText class="form-control" @bind-Value="nuevoEmpleado.DNI" />
+            </div>
+
+            <div class="mb-2">
+                <label>Correo electrónico</label>
+                <InputText class="form-control" @bind-Value="nuevoEmpleado.Email" />
+            </div>
+
+            <div class="mb-2">
+                <label>Contraseña inicial</label>
+                <InputText type="password" class="form-control" @bind-Value="nuevoEmpleado.Password" />
+            </div>
+
+            <button type="submit" class="btn btn-success">Guardar</button>
+            <button type="button" class="btn btn-secondary ms-2" @onclick="Cancelar">Cancelar</button>
+        </EditForm>
+    </div>
+}
+
+@if (empleados == null)
+{
+    <p>Cargando empleados...</p>
+}
+else if (empleados.Count == 0)
+{
+    <p>No hay empleados registrados.</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Apellidos</th>
+                <th>DNI</th>
+                <th>Email</th>
+                <th>Fecha de alta</th>
+                <th>Estado</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var empleado in empleados)
+            {
+                <tr>
+                    <td>@empleado.Nombre</td>
+                    <td>@empleado.Apellidos</td>
+                    <td>@empleado.DNI</td>
+                    <td>@empleado.Email</td>
+                    <td>@empleado.FechaAlta.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                    <td>@(empleado.Activo ? "Activo" : "Inactivo")</td>
+                    <td>
+                        @if (empleado.Activo)
+                        {
+                            <button class="btn btn-sm btn-danger"
+                                    @onclick="() => Desactivar(empleado.Id)">
+                                Desactivar
+                            </button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(mensaje))
+{
+    <div class="alert alert-info">@mensaje</div>
+}
+
+@code {
+    private List<ApplicationUser>? empleados;
+    private bool mostrarFormulario;
+    private string mensaje = "";
+
+    private NuevoEmpleadoModel nuevoEmpleado = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarEmpleados();
+    }
+
+    private async Task CargarEmpleados()
+    {
+        empleados = await EmpleadoService.ObtenerEmpleadosAsync();
+    }
+
+    private void MostrarFormulario()
+    {
+        nuevoEmpleado = new();
+        mensaje = "";
+        mostrarFormulario = true;
+    }
+
+    private void Cancelar()
+    {
+        mostrarFormulario = false;
+    }
+
+    private async Task CrearEmpleado()
+    {
+        var resultado = await EmpleadoService.CrearEmpleadoAsync(
+            nuevoEmpleado.Email,
+            nuevoEmpleado.Password,
+            nuevoEmpleado.Nombre,
+            nuevoEmpleado.Apellidos,
+            nuevoEmpleado.DNI);
+
+        if (resultado.Succeeded)
+        {
+            mensaje = "Empleado creado correctamente.";
+            mostrarFormulario = false;
+            await CargarEmpleados();
+        }
+        else
+        {
+            mensaje = string.Join(" ", resultado.Errors.Select(e => e.Description));
+        }
+    }
+
+    private async Task Desactivar(string id)
+    {
+        var resultado = await EmpleadoService.DesactivarEmpleadoAsync(id);
+
+        mensaje = resultado.Succeeded
+            ? "Empleado desactivado correctamente."
+            : string.Join(" ", resultado.Errors.Select(e => e.Description));
+
+        await CargarEmpleados();
+    }
+
+    public class NuevoEmpleadoModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Nombre { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Apellidos { get; set; } = "";
+
+        public string DNI { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Password { get; set; } = "";
+    }
+}
