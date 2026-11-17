@@ -1,0 +1,286 @@
+﻿@page "/administracion/informes"
+@attribute [Authorize(Roles = "Administrador")]
+@using Microsoft.AspNetCore.Authorization
+@using NSControlHorarioApp.Models
+@using NSControlHorarioApp.Services
+@using Microsoft.JSInterop
+@inject InformeService InformeService
+@inject InformeExcelService InformeExcelService
+@inject IJSRuntime JS
+
+<PageTitle>Informes de horas</PageTitle>
+
+<h3>Informes de horas</h3>
+
+<div class="row align-items-center mb-3">
+
+    <div class="col-md-5">
+        <label class="form-label">Empleado</label>
+
+        <InputSelect class="form-select"
+                     @bind-Value="userIdSeleccionado"
+                     @bind-Value:after="CambiarEmpleado">
+            <option value="">Todos los empleados</option>
+
+            @foreach (var empleado in empleados)
+            {
+                <option value="@empleado.Id">
+                    @empleado.Nombre @empleado.Apellidos
+                </option>
+            }
+        </InputSelect>
+    </div>
+
+    <div class="col-md-7 d-flex justify-content-md-end mt-3 mt-md-0">
+        <div class="btn-group" role="group">
+
+            <button class="btn @(periodoSeleccionado == "Semana" ? "btn-primary" : "btn-outline-primary")"
+                    @onclick='() => SeleccionarPeriodo("Semana")'>
+                Semana
+            </button>
+
+            <button class="btn @(periodoSeleccionado == "Mes" ? "btn-primary" : "btn-outline-primary")"
+                    @onclick='() => SeleccionarPeriodo("Mes")'>
+                Mes
+            </button>
+
+            <button class="btn @(periodoSeleccionado == "Anio" ? "btn-primary" : "btn-outline-primary")"
+                    @onclick='() => SeleccionarPeriodo("Anio")'>
+                Año
+            </button>
+
+            <button class="btn @(periodoSeleccionado == "Personalizado" ? "btn-primary" : "btn-outline-primary")"
+                    @onclick='() => SeleccionarPeriodo("Personalizado")'>
+                Personalizado
+            </button>
+
+        </div>
+    </div>
+    <div class="d-flex justify-content-end mb-3">
+        <button class="btn btn-success"
+                @onclick="ExportarExcel"
+                disabled="@(informes.Count == 0)">
+            <i class="bi bi-file-earmark-excel"></i>
+            Exportar a Excel
+        </button>
+    </div>
+</div>
+
+@if (periodoSeleccionado == "Personalizado")
+{
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <label class="form-label">Fecha desde</label>
+            <InputDate class="form-control" @bind-Value="fechaDesde" />
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">Fecha hasta</label>
+            <InputDate class="form-control" @bind-Value="fechaHasta" />
+        </div>
+
+        <div class="col-md-4 d-flex align-items-end">
+            <button class="btn btn-primary" @onclick="GenerarInforme">
+                Consultar
+            </button>
+        </div>
+    </div>
+}
+@if (informes.Any())
+{
+    <div class="table-responsive mt-4">
+        <table class="table table-striped table-bordered">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Empleado</th>
+                    <th>Horas trabajadas</th>
+                    <th>Vacaciones</th>
+                    <th>Baja médica</th>
+                    <th>Permiso retribuido</th>
+                    <th>Permiso no retribuido</th>
+                    <th>Incidencias</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var informe in InformesPaginados)
+                {
+                    <tr>
+                        <td>@informe.Fecha.ToString("dd/MM/yyyy")</td>
+                        <td>@informe.NombreEmpleado</td>
+                        <td>@FormatearHoras(informe.HorasTrabajadas)</td>
+                        <td>@FormatearHoras(informe.HorasVacaciones)</td>
+                        <td>@FormatearHoras(informe.HorasBaja)</td>
+                        <td>@FormatearHoras(informe.HorasPermisoRetribuido)</td>
+                        <td>@FormatearHoras(informe.HorasPermisoNoRetribuido)</td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(informe.Observaciones))
+                            {
+                                <span class="text-danger">@informe.Observaciones</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot class="table-light fw-bold">
+                <tr>
+                    <td colspan="2">TOTALES</td>
+                    <td>@FormatearHoras(informes.Sum(i => i.HorasTrabajadas))</td>
+                    <td>@FormatearHoras(informes.Sum(i => i.HorasVacaciones))</td>
+                    <td>@FormatearHoras(informes.Sum(i => i.HorasBaja))</td>
+                    <td>@FormatearHoras(informes.Sum(i => i.HorasPermisoRetribuido))</td>
+                    <td>@FormatearHoras(informes.Sum(i => i.HorasPermisoNoRetribuido))</td>
+                    <td>@informes.Count(i => i.TieneFichajePendiente)</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    @if (totalPaginas > 1)
+    {
+        <div class="d-flex justify-content-between align-items-center mt-3">
+
+            <span>
+                Página @paginaActual de @totalPaginas
+                ( @informes.Count registros )
+            </span>
+
+            <div>
+                <button class="btn btn-outline-primary me-2"
+                        disabled="@(paginaActual == 1)"
+                        @onclick="() => CambiarPagina(-1)">
+                    Anterior
+                </button>
+
+                <button class="btn btn-outline-primary"
+                        disabled="@(paginaActual == totalPaginas)"
+                        @onclick="() => CambiarPagina(1)">
+                    Siguiente
+                </button>
+            </div>
+
+        </div>
+    }
+}
+else
+{
+    <p class="text-muted mt-4">No hay resultados para mostrar.</p>
+}
+
+@code {
+    private List<ApplicationUser> empleados = new();
+    private string userIdSeleccionado = string.Empty;
+
+    private DateTime fechaDesde = DateTime.Today.AddDays(-6);
+    private DateTime fechaHasta = DateTime.Today;
+
+    private List<InformeHoras> informes = new();
+
+    private string periodoSeleccionado = "Semana";
+
+    private int paginaActual = 1;
+    private const int registrosPorPagina = 20;
+
+    private int totalPaginas => (int)Math.Ceiling(informes.Count/(double)registrosPorPagina);
+
+    private List<InformeHoras> InformesPaginados => informes.Skip((paginaActual - 1) * registrosPorPagina).Take(registrosPorPagina).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        empleados = await InformeService.ObtenerEmpleadosAsync();
+
+        periodoSeleccionado = "Semana";
+
+        var hoy = DateTime.Today;
+        int diasDesdeLunes = ((int)hoy.DayOfWeek + 6) % 7;
+
+        fechaDesde = hoy.AddDays(-diasDesdeLunes);
+        fechaHasta = hoy;
+
+        await GenerarInforme();
+    }
+
+    private async Task GenerarInforme()
+    {
+        paginaActual = 1;
+
+        if (fechaDesde > fechaHasta)
+            return;
+
+        if (string.IsNullOrEmpty(userIdSeleccionado))
+        {
+            informes = await InformeService.GenerarInformeTodosEmpleadosAsync(
+                fechaDesde, fechaHasta);
+        }
+        else
+        {
+            informes = await InformeService.GenerarInformeEmpleadoAsync(
+                userIdSeleccionado, fechaDesde, fechaHasta);
+        }
+    }
+
+    private string FormatearHoras(decimal horas)
+    {
+        var minutos = (int)Math.Round(horas * 60);
+        var duracion = TimeSpan.FromMinutes(minutos);
+
+        return $"{(int)duracion.TotalHours:D2}:{duracion.Minutes:D2}";
+    }
+
+    private async Task SeleccionarPeriodo(string periodo)
+    {
+        periodoSeleccionado = periodo;
+
+        var hoy = DateTime.Today;
+
+        switch (periodo)
+        {
+            case "Semana":
+                int diasDesdeLunes = ((int)hoy.DayOfWeek + 6) % 7;
+                fechaDesde = hoy.AddDays(-diasDesdeLunes);
+                fechaHasta = hoy;
+                break;
+
+            case "Mes":
+                fechaDesde = new DateTime(hoy.Year, hoy.Month, 1);
+                fechaHasta = hoy;
+                break;
+
+            case "Anio":
+                fechaDesde = new DateTime(hoy.Year, 1, 1);
+                fechaHasta = hoy;
+                break;
+
+            case "Personalizado":
+                return;
+        }
+
+        await GenerarInforme();
+    }
+
+    private void CambiarPagina(int desplazamiento)
+    {
+        paginaActual += desplazamiento;
+    }
+
+    private async Task CambiarEmpleado()
+    {
+        await GenerarInforme();
+    }
+
+    private async Task ExportarExcel()
+    {
+        var contenido = InformeExcelService.GenerarExcel(informes);
+
+        var nombreArchivo = $"InformeHoras_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+
+        using var stream = new MemoryStream(contenido);
+        using var streamRef = new DotNetStreamReference(stream);
+
+        await JS.InvokeVoidAsync(
+            "downloadFileFromStream",
+            nombreArchivo,
+            streamRef);
+    }
+
+}
