@@ -6,10 +6,12 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @using NSControlHorario.Data
+@using Microsoft.JSInterop
 
 @inject ApplicationDbContext DbContext
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IJSRuntime JS
 
 <PageTitle>Gestión de ausencias</PageTitle>
 
@@ -94,16 +96,30 @@
 
         </div>
 
-        <div class="mt-3">
-            <button class="btn btn-primary" @onclick="GuardarAusencia">
-                @(ausenciaEditandoId.HasValue ? "Guardar cambios" : "Guardar ausencia")
-            </button>
+        <div class="mt-3 d-flex align-items-center">
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" @onclick="GuardarAusencia">
+                    @(ausenciaEditandoId.HasValue ? "Guardar cambios" : "Guardar ausencia")
+                </button>
+
+                @if (ausenciaEditandoId.HasValue)
+                {
+                    <button class="btn btn-secondary"
+                            @onclick="CancelarEdicion">
+                        Cancelar
+                    </button>
+                }
+            </div>
+
             @if (ausenciaEditandoId.HasValue)
             {
-                <button class="btn btn-secondary ms-2"
-                        @onclick="CancelarEdicion">
-                    Cancelar
-                </button>
+                <div class="ms-auto">
+                    <button class="btn btn-danger"
+                            @onclick="() => EliminarAusencia(
+                        ausenciasRegistradas.First(a => a.Id == ausenciaEditandoId.Value))">
+                        Eliminar
+                    </button>
+                </div>
             }
         </div>
 
@@ -280,8 +296,9 @@
 
         await DbContext.SaveChangesAsync();
 
-        mensaje = "Ausencia registrada correctamente.";
+        mensaje = ausenciaEditandoId.HasValue ? "Ausencia modificada correctamente." : "Ausencia registrada correctamente.";
 
+        ausenciaEditandoId = null;
         await CargarAusencias();
 
         observaciones = string.Empty;
@@ -367,5 +384,28 @@
         horaFin = DateTime.Today.AddHours(14);
         observaciones = string.Empty;
         mensaje = string.Empty;
+    }
+
+    private async Task EliminarAusencia(Ausencia ausencia)
+    {
+        bool confirmar = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"¿Estás seguro de que deseas eliminar la ausencia de {ausencia.Usuario?.Nombre} {ausencia.Usuario?.Apellidos} ({ausencia.Tipo})?");
+
+        if (!confirmar)
+            return;
+
+        DbContext.Ausencias.Remove(ausencia);
+
+        await DbContext.SaveChangesAsync();
+
+        if (ausenciaEditandoId == ausencia.Id)
+        {
+            CancelarEdicion();
+        }
+
+        await CargarAusencias();
+
+        mensaje = "Ausencia eliminada correctamente.";
     }
 }
