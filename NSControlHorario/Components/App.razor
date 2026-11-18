@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="NSControlHorario.styles.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
@@ -16,6 +17,81 @@
     <Routes @rendermode="RenderModeForPage" />
     <script src="js/download.js"></script>
     <script src="_framework/blazor.web.js"></script>
+    <script> /* Control Bloq Mayus y ojo para ver contraseña toggle */
+        function comprobarBloqMayus(event) {
+            const campos = [
+                {
+                    id: "password",
+                    aviso: "caps-lock-warning"
+                },
+                {
+                    id: "NuevaPassword",
+                    aviso: "caps-lock-warning-empleado"
+                }
+            ];
+
+            campos.forEach(campo => {
+                const password = document.getElementById(campo.id);
+                const warning = document.getElementById(campo.aviso);
+
+                if (!password || !warning || event.target !== password) return;
+
+                warning.style.display = event.getModifierState("CapsLock")
+                    ? "block"
+                    : "none";
+            });
+        }
+
+        document.addEventListener("keydown", comprobarBloqMayus);
+        document.addEventListener("keyup", comprobarBloqMayus);
+
+                function alternarPasswordLogin() {
+            const password = document.getElementById("password");
+            const icono = document.getElementById("password-eye-icon");
+
+            if (!password || !icono) return;
+
+            if (password.type === "password") {
+                password.type = "text";
+                icono.className = "bi bi-eye-slash";
+            } else {
+                password.type = "password";
+                icono.className = "bi bi-eye";
+            }
+        }
+    </script>
+    <script>
+        (() => {
+            let recargaProgramada = false;
+
+            const observarError = () => {
+                const error = document.getElementById("blazor-error-ui");
+
+                if (!error || recargaProgramada) return;
+
+                const visible = window.getComputedStyle(error).display !== "none";
+
+                if (visible) {
+                    recargaProgramada = true;
+
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 5000);
+                }
+            };
+
+            const observer = new MutationObserver(observarError);
+
+            observer.observe(document.body, {
+                attributes: true,
+                childList: true,
+                subtree: true,
+                attributeFilter: ["style", "class"]
+            });
+
+            observarError();
+        })();
+    </script>
 </body>
 
 </html>

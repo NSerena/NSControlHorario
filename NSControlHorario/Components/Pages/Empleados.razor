@@ -3,8 +3,11 @@
 @using Microsoft.AspNetCore.Identity
 @using NSControlHorarioApp.Models
 @using NSControlHorarioApp.Services
+@using Microsoft.JSInterop
 @attribute [Authorize(Roles = "Administrador")]
 @inject EmpleadoService EmpleadoService
+@inject NotificacionService NotificacionService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Gestión de empleados</PageTitle>
 
@@ -56,6 +59,87 @@
     </div>
 }
 
+@if (mostrarFormularioEdicion)
+{
+    <div class="card p-3 mb-4">
+        <h5>Editar empleado</h5>
+
+        <EditForm Model="empleadoEditando" OnValidSubmit="GuardarEdicion">
+            <DataAnnotationsValidator />
+
+            <div class="mb-2">
+                <label>Nombre</label>
+                <InputText class="form-control" @bind-Value="empleadoEditando.Nombre" />
+            </div>
+
+            <div class="mb-2">
+                <label>Apellidos</label>
+                <InputText class="form-control" @bind-Value="empleadoEditando.Apellidos" />
+            </div>
+
+            <div class="mb-2">
+                <label>DNI</label>
+                <InputText class="form-control" @bind-Value="empleadoEditando.DNI" />
+            </div>
+
+            <div class="mb-2">
+                <label>Correo electrónico</label>
+                <InputText class="form-control" @bind-Value="empleadoEditando.Email" />
+            </div>
+
+            <div class="mb-2">
+                <label>Teléfono</label>
+                <InputText class="form-control" @bind-Value="empleadoEditando.Telefono" />
+            </div>
+
+            <div class="mb-2">
+                <label>Nueva contraseña</label>
+
+                <div class="input-group">
+                    <InputText id="NuevaPassword"
+                                type="@(empleadoEditando.MostrarPassword ? "text" : "password")"
+                               class="form-control"
+                               @bind-Value="empleadoEditando.NuevaPassword"
+                               disabled="@(!empleadoEditando.PermitirCambiarPassword)" />
+
+                    <button type="button" class="btn btn-outline-secondary"
+                            @onclick="() => empleadoEditando.PermitirCambiarPassword = !empleadoEditando.PermitirCambiarPassword">
+                        @(empleadoEditando.PermitirCambiarPassword ? "Bloquear" : "Cambiar")
+                    </button>
+
+                    @if (empleadoEditando.PermitirCambiarPassword)
+                    {
+                        <button type="button" class="btn btn-outline-secondary"
+                                @onclick="() => empleadoEditando.MostrarPassword = !empleadoEditando.MostrarPassword">
+                            @(empleadoEditando.MostrarPassword ? "Ocultar" : "Ver")
+                        </button>
+                    }
+                </div>
+
+                @if (empleadoEditando.PermitirCambiarPassword)
+                {
+                    <div id="caps-lock-warning-empleado"
+                         class="text-warning mt-2"
+                         style="display:none;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Bloq Mayús está activado.
+                    </div>
+                }
+
+                <small class="text-muted">
+                    Solo se cambiará si habilitas este campo e introduces una contraseña.
+                </small>
+            </div>
+
+            <button type="submit" class="btn btn-success">Guardar cambios</button>
+            <button type="button" class="btn btn-secondary ms-2"
+                    @onclick="() => mostrarFormularioEdicion = false">
+                Cancelar
+            </button>
+        </EditForm>
+    </div>
+}
+
 @if (empleados == null)
 {
     <p>Cargando empleados...</p>
@@ -89,11 +173,25 @@ else
                     <td>@empleado.FechaAlta.ToLocalTime().ToString("dd/MM/yyyy")</td>
                     <td>@(empleado.Activo ? "Activo" : "Inactivo")</td>
                     <td>
+                        <!--
+                        <button class="btn btn-sm btn-primary"
+                                @onclick="() => Editar(empleado)">
+                            Editar
+                        </button>
+                        -->
+
                         @if (empleado.Activo)
                         {
-                            <button class="btn btn-sm btn-danger"
+                            <button class="btn btn-sm btn-danger ms-1"
                                     @onclick="() => Desactivar(empleado.Id)">
                                 Desactivar
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-success ms-1"
+                                    @onclick="() => Activar(empleado.Id)">
+                                Reactivar
                             </button>
                         }
                     </td>
@@ -103,17 +201,14 @@ else
     </table>
 }
 
-@if (!string.IsNullOrEmpty(mensaje))
-{
-    <div class="alert alert-info">@mensaje</div>
-}
-
 @code {
     private List<ApplicationUser>? empleados;
     private bool mostrarFormulario;
-    private string mensaje = "";
 
-    private NuevoEmpleadoModel nuevoEmpleado = new();
+    private NuevoEmpleado nuevoEmpleado = new();
+
+    private EditarEmpleadoModel empleadoEditando = new();
+    private bool mostrarFormularioEdicion;
 
     protected override async Task OnInitializedAsync()
     {
@@ -128,7 +223,6 @@ else
     private void MostrarFormulario()
     {
         nuevoEmpleado = new();
-        mensaje = "";
         mostrarFormulario = true;
     }
 
@@ -148,42 +242,108 @@ else
 
         if (resultado.Succeeded)
         {
-            mensaje = "Empleado creado correctamente.";
+            NotificacionService.Mostrar("Empleado creado correctamente.", "success");
             mostrarFormulario = false;
             await CargarEmpleados();
         }
         else
         {
-            mensaje = string.Join(" ", resultado.Errors.Select(e => e.Description));
+            NotificacionService.Mostrar( string.Join(" ", resultado.Errors.Select(e => e.Description)), "error");
         }
     }
 
     private async Task Desactivar(string id)
     {
+        var confirmar = await JSRuntime.InvokeAsync<bool>("confirm", "¿Estás seguro de que quieres desactivar este empleado?");
+
+        if (!confirmar)
+            return;
+
         var resultado = await EmpleadoService.DesactivarEmpleadoAsync(id);
 
-        mensaje = resultado.Succeeded
-            ? "Empleado desactivado correctamente."
-            : string.Join(" ", resultado.Errors.Select(e => e.Description));
+        NotificacionService.Mostrar(resultado.Succeeded ? "Empleado desactivado correctamente." : string.Join(" ", resultado.Errors.Select(e => e.Description)), resultado.Succeeded ? "success" : "error");
 
         await CargarEmpleados();
     }
 
-    public class NuevoEmpleadoModel
+    private async Task Activar(string id)
     {
-        [System.ComponentModel.DataAnnotations.Required]
+        var confirmar = await JSRuntime.InvokeAsync<bool>("confirm", "¿Estás seguro de que quieres reactivar este empleado?");
+
+        if (!confirmar)
+        return;
+
+        var resultado = await EmpleadoService.ActivarEmpleadoAsync(id);
+
+        NotificacionService.Mostrar(resultado.Succeeded ? "Empleado reactivado correctamente." : string.Join(" ", resultado.Errors.Select(e => e.Description)), resultado.Succeeded ? "success" : "error");
+
+        await CargarEmpleados();
+    }
+
+    private void Editar(ApplicationUser empleado)
+    {
+        empleadoEditando = new EditarEmpleadoModel
+            {
+                Id = empleado.Id,
+                Nombre = empleado.Nombre,
+                Apellidos = empleado.Apellidos,
+                DNI = empleado.DNI,
+                Email = empleado.Email ?? "",
+                Telefono = empleado.PhoneNumber
+            };
+
+        mostrarFormularioEdicion = true;
+    }
+
+    private async Task GuardarEdicion()
+    {
+        var resultado = await EmpleadoService.ActualizarEmpleadoAsync(
+            empleadoEditando.Id,
+            empleadoEditando.Email,
+            empleadoEditando.Nombre,
+            empleadoEditando.Apellidos,
+            empleadoEditando.DNI,
+            empleadoEditando.Telefono);
+
+        if (!resultado.Succeeded)
+        {
+            NotificacionService.Mostrar(string.Join(" ", resultado.Errors.Select(e => e.Description)),"error");
+
+            return;
+        }
+
+        if (empleadoEditando.PermitirCambiarPassword && !string.IsNullOrWhiteSpace(empleadoEditando.NuevaPassword))
+        {
+            var resultadoPassword = await EmpleadoService.CambiarPasswordEmpleadoAsync(
+                empleadoEditando.Id,
+                empleadoEditando.NuevaPassword);
+
+            if (!resultadoPassword.Succeeded)
+            {
+                NotificacionService.Mostrar("Datos actualizados, pero no se pudo cambiar la contraseña: " + string.Join(" ", resultadoPassword.Errors.Select(e => e.Description)),"error");
+
+                mostrarFormularioEdicion = false;
+                await CargarEmpleados();
+                return;
+            }
+        }
+
+        NotificacionService.Mostrar("Empleado actualizado correctamente.","success");
+
+        mostrarFormularioEdicion = false;
+        await CargarEmpleados();
+    }
+
+    public class EditarEmpleadoModel
+    {
+        public string Id { get; set; } = "";
         public string Nombre { get; set; } = "";
-
-        [System.ComponentModel.DataAnnotations.Required]
         public string Apellidos { get; set; } = "";
-
-        public string DNI { get; set; } = "";
-
-        [System.ComponentModel.DataAnnotations.Required]
-        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string? DNI { get; set; }
         public string Email { get; set; } = "";
-
-        [System.ComponentModel.DataAnnotations.Required]
-        public string Password { get; set; } = "";
+        public string? Telefono { get; set; }
+        public string NuevaPassword { get; set; } = "";
+        public bool PermitirCambiarPassword { get; set; }
+        public bool MostrarPassword { get; set; }
     }
 }

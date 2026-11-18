@@ -248,6 +248,9 @@ namespace NSControlHorario.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("Estado")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("FechaFinUtc")
                         .HasColumnType("datetime2");
 
@@ -256,6 +259,13 @@ namespace NSControlHorario.Migrations
 
                     b.Property<DateTime>("FechaRegistroUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("FechaResolucionUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MotivoResolucion")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("Observaciones")
                         .IsRequired()
@@ -273,11 +283,16 @@ namespace NSControlHorario.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("UsuarioResolucionId")
+                        .HasColumnType("nvarchar(450)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
 
                     b.HasIndex("UsuarioRegistroId");
+
+                    b.HasIndex("UsuarioResolucionId");
 
                     b.ToTable("Ausencias");
                 });
@@ -416,9 +431,15 @@ namespace NSControlHorario.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
+                    b.HasOne("NSControlHorarioApp.Models.ApplicationUser", "UsuarioResolucion")
+                        .WithMany()
+                        .HasForeignKey("UsuarioResolucionId");
+
                     b.Navigation("Usuario");
 
                     b.Navigation("UsuarioRegistro");
+
+                    b.Navigation("UsuarioResolucion");
                 });
 
             modelBuilder.Entity("NSControlHorarioApp.Models.Fichaje", b =>

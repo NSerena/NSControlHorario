@@ -45,6 +45,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>{options.SignIn.Requ
 .AddSignInManager()
 .AddDefaultTokenProviders();
 
+builder.Services.AddScoped<IdentityErrorDescriber, SpanishIdentityErrorDescriber>();
+
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 builder.Services.AddScoped<EmpleadoService>();
@@ -52,6 +54,7 @@ builder.Services.AddScoped<FichajeService>();
 builder.Services.AddScoped<ModificacionFichajeService>();
 builder.Services.AddScoped<InformeService>();
 builder.Services.AddScoped<InformeExcelService>();
+builder.Services.AddScoped<NotificacionService>();
 
 var app = builder.Build();
 

@@ -1,0 +1,58 @@
+﻿@using NSControlHorarioApp.Services
+@implements IDisposable
+@inject NotificacionService NotificacionService
+
+@if (!string.IsNullOrEmpty(mensaje))
+{
+    <!--<div style="@ObtenerEstilo()">-->
+    @if (!string.IsNullOrEmpty(mensaje))
+    {
+        <div class="notificacion @tipoNotificacion @(desapareciendo ? "desapareciendo" : "")">
+            @mensaje
+        </div>
+    }
+}
+
+@code {
+    private string mensaje = "";
+    private string tipoNotificacion = "";
+    private System.Threading.Timer? temporizador;
+    private bool desapareciendo = false;
+
+    protected override void OnInitialized()
+    {
+        NotificacionService.NotificacionSolicitada += Mostrar;
+    }
+
+    private void Mostrar(string texto, string tipo)
+    {
+        mensaje = texto;
+        tipoNotificacion = tipo;
+        desapareciendo = false;
+
+        temporizador?.Dispose();
+
+        _ = InvokeAsync(StateHasChanged);
+
+        temporizador = new System.Threading.Timer(async _ =>
+        {
+            desapareciendo = true;
+            await InvokeAsync(StateHasChanged);
+
+            await Task.Delay(700);
+
+            mensaje = "";
+            desapareciendo = false;
+
+            await InvokeAsync(StateHasChanged);
+
+        }, null, 4000, Timeout.Infinite);
+    }
+
+    public void Dispose()
+    {
+        NotificacionService.NotificacionSolicitada -= Mostrar;
+        temporizador?.Dispose();
+    }
+
+}

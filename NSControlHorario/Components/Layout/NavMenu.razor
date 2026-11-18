@@ -4,7 +4,7 @@
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">NSControlHorario</a>
+        <a class="navbar-brand" href="">ControlHorario</a>
     </div>
 </div>
 
@@ -12,36 +12,27 @@
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
         <AuthorizeView>
             <Authorized>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Manage">
-                        <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> @context.User.Identity?.Name
+                    <NavLink class="nav-link" href="mi-fichaje">
+                        <span class="bi bi-icon-person-video3-nav-menu"
+                              aria-hidden="true"></span>
+                        Mi Fichaje
                     </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <form action="Account/Logout" method="post">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
-                        <button type="submit" class="nav-link">
-                            <span class="bi bi-arrow-bar-left-nav-menu" aria-hidden="true"></span> Logout
-                        </button>
-                    </form>
                 </div>
             </Authorized>
-            <NotAuthorized>
+        </AuthorizeView>
+        <AuthorizeView>
+            <Authorized>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Login">
-                        <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Login
+                    <NavLink class="nav-link" href="ausencias">
+                        <span class="bi bi-calendar3-nav-menu"
+                              aria-hidden="true"></span>
+                        Ausencias
                     </NavLink>
                 </div>
-            </NotAuthorized>
+            </Authorized>
         </AuthorizeView>
         <AuthorizeView Roles="Administrador">
             <Authorized>
@@ -54,24 +45,13 @@
                 </div>
             </Authorized>
         </AuthorizeView>
-        <AuthorizeView>
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="mi-fichaje">
-                        <span class="bi bi-icon-person-video3-nav-menu"
-                              aria-hidden="true"></span>
-                        Mi Fichaje
-                    </NavLink>
-                </div>
-            </Authorized>
-        </AuthorizeView>
         <AuthorizeView Roles="Administrador">
             <Authorized>
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="administracion/fichajes">
                         <span class="bi bi-list-nested-nav-menu"
                               aria-hidden="true"></span>
-                        Administrar fichajes
+                        Control fichajes
                     </NavLink>
                 </div>
             </Authorized>
@@ -91,7 +71,7 @@
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="administracion/ausencias">
                         <span class="bi bi-calendar3-nav-menu" aria-hidden="true"></span>
-                        Ausencias
+                        Control Ausencias
                     </NavLink>
                 </div>
             </Authorized>

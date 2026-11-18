@@ -11,6 +11,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ModificacionFichajeService ModificacionFichajeService
 @inject ApplicationDbContext DbContext
+@inject NotificacionService NotificacionService
 
 <PageTitle>Administrar fichajes</PageTitle>
 
@@ -62,10 +63,19 @@
         </p>
 
         <div class="mb-3">
-            <label>Fecha y hora:</label>
-            <input type="datetime-local"
+            <label>Fecha:</label>
+            <input type="date"
                    class="form-control"
-                   @bind="fechaHoraEdicion" />
+                   @bind="fechaEdicion" />
+        </div>
+
+        <div class="mb-3">
+            <label>Hora:</label>
+            <input type="text"
+                   class="form-control"
+                   @bind="horaEdicion"
+                   placeholder="HH:mm"
+                   maxlength="5" />
         </div>
 
         <div class="mb-3">
@@ -95,11 +105,6 @@
     </div>
 }
 
-@if (!string.IsNullOrEmpty(mensaje))
-{
-    <div class="alert alert-info">@mensaje</div>
-}
-
 @if (cargando)
 {
     <p>Consultando fichajes...</p>
@@ -119,6 +124,7 @@ else
                 <th>Acciones</th>
                 <th style="width: 90px; text-align: center;">Modificado</th>
                 <th>Motivo</th>
+                <th>Hora previa modificación</th>
             </tr>
         </thead>
         <tbody>
@@ -149,10 +155,20 @@ else
                                checked="@fichajesModificados.Contains(fichaje.Id)"
                                disabled />
                     </td>
-                    <td style="min-width: 300px;">
+                    <td>
                         @if (motivosUltimaModificacion.TryGetValue(fichaje.Id, out var motivo))
                         {
                             @motivo
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </td>
+                    <td>
+                        @if (fechasAnterioresModificacion.TryGetValue(fichaje.Id, out var fechaAnterior))
+                        {
+                            @ConvertirHoraMadrid(fechaAnterior).ToString("dd/MM/yyyy HH:mm:ss")
                         }
                         else
                         {
@@ -179,14 +195,14 @@ else
     private static readonly TimeZoneInfo ZonaMadrid =
         TimeZoneInfo.FindSystemTimeZoneById("Romance Standard Time");
 
-    private string mensaje = "";
-
     private Fichaje? fichajeEditando;
-    private DateTime fechaHoraEdicion;
+    private DateTime fechaEdicion = DateTime.Today;
+    private string horaEdicion = "09:00";
     private TipoFichaje tipoEdicion;
     private string motivoEdicion = "";
 
     private Dictionary<int, string> motivosUltimaModificacion = new();
+    private Dictionary<int, DateTime> fechasAnterioresModificacion = new();
     private HashSet<int> fichajesModificados = new();
 
     protected override async Task OnInitializedAsync()
@@ -266,6 +282,7 @@ else
                 .ToListAsync();
 
             motivosUltimaModificacion.Clear();
+            fechasAnterioresModificacion.Clear();
             fichajesModificados.Clear();
 
             foreach (var modificacion in modificaciones)
@@ -277,6 +294,10 @@ else
                     motivosUltimaModificacion.Add(
                         modificacion.FichajeId,
                         modificacion.Motivo);
+
+                    fechasAnterioresModificacion.Add(
+                        modificacion.FichajeId,
+                        modificacion.FechaHoraAnteriorUtc);
                 }
             }
         }
@@ -312,12 +333,13 @@ else
     {
         fichajeEditando = fichaje;
 
-        fechaHoraEdicion = ConvertirHoraMadrid(
-            fichaje.FechaHoraUtc);
+        var fechaLocal = ConvertirHoraMadrid(fichaje.FechaHoraUtc);
+
+        fechaEdicion = fechaLocal.Date;
+        horaEdicion = fechaLocal.ToString("HH:mm");
 
         tipoEdicion = fichaje.Tipo;
         motivoEdicion = "";
-        mensaje = "";
     }
 
     private void CancelarEdicion()
@@ -331,12 +353,19 @@ else
         if (fichajeEditando == null)
             return;
 
-        mensaje = "";
-
         try
         {
+            if (!TimeSpan.TryParseExact(
+                    horaEdicion,
+                    @"hh\:mm",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out TimeSpan hora))
+            {
+                NotificacionService.Mostrar("La hora no es válida. Utiliza el formato HH:mm.", "warning"); return;
+            }
+
             var fechaMadrid = DateTime.SpecifyKind(
-                fechaHoraEdicion,
+                fechaEdicion.Date.Add(hora),
                 DateTimeKind.Unspecified);
 
             var fechaUtc = TimeZoneInfo.ConvertTimeToUtc(
@@ -353,7 +382,7 @@ else
                 tipoEdicion,
                 motivoEdicion);
 
-            mensaje = resultado.Mensaje;
+            NotificacionService.Mostrar(resultado.Mensaje, resultado.Correcto ? "success" : "error");
 
             if (resultado.Correcto)
             {
@@ -365,7 +394,7 @@ else
         }
         catch (Exception ex)
         {
-            mensaje = "Error al modificar el fichaje: " + ex.Message;
+            NotificacionService.Mostrar("Error al modificar el fichaje: " + ex.Message, "error");
         }
     }
 }

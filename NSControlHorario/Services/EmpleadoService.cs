@@ -73,5 +73,83 @@ namespace NSControlHorarioApp.Services
 
             return await _userManager.UpdateAsync(empleado);
         }
+
+        public async Task<IdentityResult> ActivarEmpleadoAsync(string id)
+        {
+            var empleado = await _userManager.FindByIdAsync(id);
+
+            if (empleado == null)
+            {
+                return IdentityResult.Failed(
+                    new IdentityError { Description = "Empleado no encontrado." });
+            }
+
+            empleado.Activo = true;
+
+            return await _userManager.UpdateAsync(empleado);
+        }
+
+        public async Task<IdentityResult> ActualizarEmpleadoAsync(
+            string id,
+            string email,
+            string nombre,
+            string apellidos,
+            string? dni,
+            string? telefono)
+        {
+            var empleado = await _userManager.FindByIdAsync(id);
+
+            if (empleado == null)
+            {
+                return IdentityResult.Failed(
+                    new IdentityError { Description = "Empleado no encontrado." });
+            }
+
+            var usuarioConEmail = await _userManager.FindByEmailAsync(email);
+
+            if (usuarioConEmail != null && usuarioConEmail.Id != id)
+            {
+                return IdentityResult.Failed(
+                    new IdentityError { Description = "Ya existe otro empleado con ese correo electrónico." });
+            }
+
+            var resultado = await _userManager.SetUserNameAsync(empleado, email);
+
+            if (!resultado.Succeeded)
+                return resultado;
+
+            resultado = await _userManager.SetEmailAsync(empleado, email);
+
+            if (!resultado.Succeeded)
+                return resultado;
+
+            empleado.Nombre = nombre;
+            empleado.Apellidos = apellidos;
+            empleado.DNI = dni;
+            empleado.PhoneNumber = telefono;
+
+            return await _userManager.UpdateAsync(empleado);
+        }
+
+        public async Task<IdentityResult> CambiarPasswordEmpleadoAsync(
+            string id,
+            string nuevaPassword)
+        {
+            var empleado = await _userManager.FindByIdAsync(id);
+
+            if (empleado == null)
+            {
+                return IdentityResult.Failed(
+                    new IdentityError { Description = "Empleado no encontrado." });
+            }
+
+            var token = await _userManager.GeneratePasswordResetTokenAsync(empleado);
+
+            return await _userManager.ResetPasswordAsync(
+                empleado,
+                token,
+                nuevaPassword);
+        }
+
     }
 }

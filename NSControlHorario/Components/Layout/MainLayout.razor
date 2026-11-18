@@ -1,14 +1,39 @@
-﻿@inherits LayoutComponentBase
+﻿@using NSControlHorario.Components.Shared
+@using NSControlHorarioApp.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager NavigationManager
+@inherits LayoutComponentBase
+@inject NotificacionService NotificacionService
 
 <div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+    <AuthorizeView>
+        <Authorized>
+            <div class="sidebar">
+                <NavMenu />
+            </div>
+        </Authorized>
+    </AuthorizeView>
 
     <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
+        <AuthorizeView>
+            <Authorized Context="auth">
+                <div class="top-row px-4">
+                    <div class="topbar-user">
+                        <i class="bi bi-person-circle"></i>
+                        <span>@auth.User.Identity?.Name</span>
+                    </div>
+
+                    <form action="Account/Logout" method="post" class="d-inline">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                        <button type="submit" class="nav-link topbar-button">
+                            <span class="bi bi-box-arrow-right" aria-hidden="true"></span>
+                            Logout
+                        </button>
+                    </form>
+                </div>
+            </Authorized>
+        </AuthorizeView>
 
         <article class="content px-4">
             @Body
@@ -16,8 +41,37 @@
     </main>
 </div>
 
+<Notificaciones />
+
 <div id="blazor-error-ui">
-    An unhandled error has occurred.
-    <a href="" class="reload">Reload</a>
-    <a class="dismiss">🗙</a>
+    Se ha producido un error. La página se recargará automáticamente...
 </div>
+
+@code {
+    private string? currentUrl;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Recarga automatica cuando da error no controlado
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

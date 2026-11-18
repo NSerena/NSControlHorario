@@ -11,51 +11,94 @@
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Log in</PageTitle>
+<PageTitle>Acceso</PageTitle>
 
-<h1>Log in</h1>
-<div class="row">
-    <div class="col-md-4">
-        <section>
-            <StatusMessage Message="@errorMessage" />
-            <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
-                <DataAnnotationsValidator />
-                <h2>Use a local account to log in.</h2>
-                <hr />
-                <ValidationSummary class="text-danger" role="alert" />
-                <div class="form-floating mb-3">
-                    <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-                    <label for="email" class="form-label">Email</label>
-                    <ValidationMessage For="() => Input.Email" class="text-danger" />
-                </div>
-                <div class="form-floating mb-3">
-                    <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
-                    <label for="password" class="form-label">Password</label>
-                    <ValidationMessage For="() => Input.Password" class="text-danger" />
-                </div>
-                <div class="checkbox mb-3">
-                    <label class="form-label">
-                        <InputCheckbox @bind-Value="Input.RememberMe" class="darker-border-checkbox form-check-input" />
-                        Remember me
-                    </label>
-                </div>
-                <div>
-                    <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
-                </div>
-                <div>
-                    <p>
-                        <a href="Account/ForgotPassword">Forgot your password?</a>
-                    </p>
-                    <p>
-                        <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Register as a new user</a>
-                    </p>
-                    <p>
-                        <a href="Account/ResendEmailConfirmation">Resend email confirmation</a>
-                    </p>
-                </div>
-            </EditForm>
-        </section>
+<div class="login-container">
+    <div class="login-form">
+
+        <div class="login-brand">
+            <div class="login-brand-icon">
+                <i class="bi bi-clock-history"></i>
+            </div>
+            <h2>ControlHorario</h2>
+            <p>Sistema de gestión y control horario</p>
+        </div>
+
+        <div class="login-card">
+            <h4>Bienvenido</h4>
+            <p class="login-subtitle">Introduce tus credenciales para continuar</p>
+
+            <section>
+                <StatusMessage Message="@errorMessage" />
+
+                <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label class="login-label">Correo electrónico</label>
+                        <div class="login-input-group">
+                            <i class="bi bi-envelope"></i>
+                            <InputText @bind-Value="Input.Email"
+                                       class="form-control"
+                                       autocomplete="username"
+                                       aria-required="true"
+                                       placeholder="nombre@ejemplo.com" />
+                        </div>
+                        <ValidationMessage For="() => Input.Email" class="text-danger" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="login-label">Contraseña</label>
+
+                        <div class="login-input-group">
+                            <i class="bi bi-lock"></i>
+
+                            <InputText id="password"
+                                       type="password"
+                                       @bind-Value="Input.Password"
+                                       class="form-control"
+                                       autocomplete="current-password"
+                                       aria-required="true"
+                                       placeholder="Introduce tu contraseña" />
+
+                            <button type="button"
+                                    class="login-password-toggle"
+                                    onclick="alternarPasswordLogin()"
+                                    tabindex="-1"
+                                    aria-label="Mostrar u ocultar contraseña">
+                                <i id="password-eye-icon" class="bi bi-eye"></i>
+                            </button>
+                        </div>
+
+                        <ValidationMessage For="() => Input.Password" class="text-danger" />
+
+                        <div id="caps-lock-warning" class="text-warning mt-2" style="display:none;">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Bloq Mayús está activado.
+                        </div>
+                    </div>
+
+                    <div class="login-remember mb-4">
+                        <label>
+                            <InputCheckbox @bind-Value="Input.RememberMe"
+                                           class="form-check-input" />
+                            Recuérdame
+                        </label>
+                    </div>
+
+                    <button type="submit" class="login-button">
+                        Acceder <i class="bi bi-arrow-right"></i>
+                    </button>
+                </EditForm>
+            </section>
+        </div>
+
+        <div class="login-footer">
+            © Zaraintra 2026 · Gestión de jornada laboral
+        </div>
+
     </div>
+    <!-- AÑADIR ENTRAR CON GOOGLE/MICROSOFT ?????????????????????????????
     <div class="col-md-6 col-md-offset-2">
         <section>
             <h3>Use another service to log in.</h3>
@@ -63,7 +106,9 @@
             <ExternalLoginPicker />
         </section>
     </div>
+    -->
 </div>
+
 
 @code {
     private string? errorMessage;
@@ -115,15 +160,15 @@
 
     private sealed class InputModel
     {
-        [Required]
-        [EmailAddress]
+        [Required(ErrorMessage = "El correo electrónico es obligatorio.")]
+        [EmailAddress(ErrorMessage = "Introduce una dirección de correo electrónico válida.")]
         public string Email { get; set; } = "";
 
-        [Required]
+        [Required(ErrorMessage = "La contraseña es obligatoria.")]
         [DataType(DataType.Password)]
         public string Password { get; set; } = "";
 
-        [Display(Name = "Remember me?")]
+        [Display(Name = "Recuérdame")]
         public bool RememberMe { get; set; }
     }
 }

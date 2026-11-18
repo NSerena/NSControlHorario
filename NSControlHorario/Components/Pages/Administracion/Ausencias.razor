@@ -6,12 +6,14 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @using NSControlHorario.Data
-@using Microsoft.JSInterop
+@using NSControlHorarioApp.Services
+@using static NSControlHorarioApp.Models.Ausencia
 
 @inject ApplicationDbContext DbContext
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject IJSRuntime JS
+@inject NotificacionService NotificacionService
+
 
 <PageTitle>Gestión de ausencias</PageTitle>
 
@@ -21,117 +23,26 @@
     Administración de vacaciones, bajas médicas y permisos de los empleados.
 </p>
 
-@if (!string.IsNullOrEmpty(mensaje))
-{
-    <div class="alert alert-info mt-3">
-        @mensaje
-    </div>
-}
-
-<div class="card mt-4">
-    <div class="card-header">
-        <strong>@(ausenciaEditandoId.HasValue ? "Modificar ausencia" : "Registrar ausencia")</strong>
-    </div>
-
-    <div class="card-body">
-        <div class="row">
-
-            <div class="col-md-6 mb-3">
-                <label class="form-label">Empleado</label>
-                <InputSelect class="form-select" @bind-Value="userIdSeleccionado">
-                    <option value="">Selecciona un empleado</option>
-
-                    @foreach (var empleado in empleados)
-                    {
-                        <option value="@empleado.Id">
-                            @empleado.Nombre @empleado.Apellidos
-                        </option>
-                    }
-                </InputSelect>
-            </div>
-
-            <div class="col-md-6 mb-3">
-                <label class="form-label">Tipo de ausencia</label>
-                <InputSelect class="form-select" @bind-Value="tipoSeleccionado">
-                    @foreach (var tipo in Enum.GetValues<TipoAusencia>())
-                    {
-                        <option value="@tipo">@tipo</option>
-                    }
-                </InputSelect>
-            </div>
-
-            <div class="col-md-6 mb-3">
-                <label class="form-label">Fecha de inicio</label>
-                <InputDate class="form-control" @bind-Value="fechaInicio" />
-            </div>
-
-            <div class="col-md-6 mb-3">
-                <label class="form-label">Fecha de fin</label>
-                <InputDate class="form-control" @bind-Value="fechaFin" />
-            </div>
-
-            @if (tipoSeleccionado != TipoAusencia.Vacaciones)
-            {
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Hora de inicio</label>
-                    <InputDate Type="InputDateType.Time"
-                               class="form-control"
-                               @bind-Value="horaInicio" />
-                </div>
-
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Hora de fin</label>
-                    <InputDate Type="InputDateType.Time"
-                               class="form-control"
-                               @bind-Value="horaFin" />
-                </div>
-            }
-
-            <div class="col-12 mb-3">
-                <label class="form-label">Observaciones</label>
-                <InputTextArea class="form-control"
-                               @bind-Value="observaciones"
-                               rows="3" />
-            </div>
-
-        </div>
-
-        <div class="mt-3 d-flex align-items-center">
-            <div class="d-flex gap-2">
-                <button class="btn btn-primary" @onclick="GuardarAusencia">
-                    @(ausenciaEditandoId.HasValue ? "Guardar cambios" : "Guardar ausencia")
-                </button>
-
-                @if (ausenciaEditandoId.HasValue)
-                {
-                    <button class="btn btn-secondary"
-                            @onclick="CancelarEdicion">
-                        Cancelar
-                    </button>
-                }
-            </div>
-
-            @if (ausenciaEditandoId.HasValue)
-            {
-                <div class="ms-auto">
-                    <button class="btn btn-danger"
-                            @onclick="() => EliminarAusencia(
-                        ausenciasRegistradas.First(a => a.Id == ausenciaEditandoId.Value))">
-                        Eliminar
-                    </button>
-                </div>
-            }
-        </div>
-
-    </div>
-</div>
-
 <div class="card mt-4">
     <div class="card-header">
         <strong>Ausencias registradas</strong>
     </div>
 
     <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label">Filtrar por empleado</label>
+            <InputSelect class="form-select" @bind-Value="filtroEmpleado">
+                <option value="">Todos los empleados</option>
+
+                @foreach (var empleado in empleados)
+                {
+                    <option value="@empleado.Id">
+                        @empleado.Nombre @empleado.Apellidos
+                    </option>
+                }
+            </InputSelect>
+        </div>
+
         @if (ausenciasRegistradas.Count == 0)
         {
             <p class="text-muted mb-0">No hay ausencias registradas.</p>
@@ -146,11 +57,12 @@
                             <th>Tipo</th>
                             <th>Periodo</th>
                             <th>Observaciones</th>
+                            <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var ausencia in ausenciasRegistradas)
+                        @foreach (var ausencia in ausenciasRegistradas.Where(a => string.IsNullOrEmpty(filtroEmpleado) || a.UserId == filtroEmpleado))
                         {
                             <tr>
                                 <td>
@@ -161,10 +73,46 @@
                                 <td>@FormatearPeriodo(ausencia)</td>
                                 <td>@ausencia.Observaciones</td>
                                 <td>
-                                    <button class="btn btn-sm btn-primary"
-                                            @onclick="() => EditarAusencia(ausencia)">
-                                        Editar
-                                    </button>
+                                    @switch (ausencia.Estado)
+                                    {
+                                        case EstadoAusencia.Pendiente:
+                                            <span class="badge bg-warning text-dark">Pendiente</span>
+                                            break;
+
+                                        case EstadoAusencia.Aceptada:
+                                            <span class="badge bg-success">Aceptada</span>
+                                            break;
+
+                                        case EstadoAusencia.Denegada:
+                                            <span class="badge bg-danger">Denegada</span>
+                                            break;
+                                    }
+                                </td>
+                                <td>
+                                    @if (ausencia.Estado == EstadoAusencia.Pendiente)
+                                    {
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-sm btn-success"
+                                                    @onclick="() => AceptarAusencia(ausencia.Id)">
+                                                <i class="bi bi-check-circle me-1"></i>
+                                                Aceptar
+                                            </button>
+
+                                            <button class="btn btn-sm btn-danger"
+                                                    @onclick="() => DenegarAusencia(ausencia.Id)">
+                                                <i class="bi bi-x-circle me-1"></i>
+                                                Denegar
+                                            </button>
+                                        </div>
+                                    }
+                                    else if (ausencia.Estado == EstadoAusencia.Denegada)
+                                    {
+                                        <span>@ausencia.MotivoResolucion</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Resuelta</span>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -175,21 +123,46 @@
     </div>
 </div>
 
+@if (mostrarFormularioDenegacion)
+{
+    <div class="card mt-3 border-danger">
+        <div class="card-header">
+            <strong>Denegar solicitud de ausencia</strong>
+        </div>
+
+        <div class="card-body">
+            <label class="form-label">Motivo de la denegación</label>
+
+            <InputTextArea class="form-control"
+                           @bind-Value="motivoDenegacion"
+                           rows="3"
+                           maxlength="500" />
+
+            <div class="mt-3 d-flex gap-2">
+                <button class="btn btn-danger"
+                        @onclick="ConfirmarDenegacion">
+                    Confirmar denegación
+                </button>
+
+                <button class="btn btn-secondary"
+                        @onclick="CancelarDenegacion">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
 
     private List<ApplicationUser> empleados = new();
-    private string userIdSeleccionado = string.Empty;
-    private TipoAusencia tipoSeleccionado = TipoAusencia.Vacaciones;
-    private DateTime fechaInicio = DateTime.Today;
-    private DateTime fechaFin = DateTime.Today;
 
-    private DateTime horaInicio = DateTime.Today.AddHours(8);
-    private DateTime horaFin = DateTime.Today.AddHours(18);
-    private string observaciones = string.Empty;
-    private string mensaje = string.Empty;
-
+    private string filtroEmpleado = string.Empty;
     private List<Ausencia> ausenciasRegistradas = new();
-    private int? ausenciaEditandoId = null;
+
+    private bool mostrarFormularioDenegacion = false;
+    private int? ausenciaDenegandoId = null;
+    private string motivoDenegacion = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -200,112 +173,6 @@
             .ToListAsync();
 
         await CargarAusencias();
-    }
-
-    private async Task GuardarAusencia()
-    {
-        mensaje = string.Empty;
-
-        if (string.IsNullOrEmpty(userIdSeleccionado))
-        {
-            mensaje = "Debes seleccionar un empleado.";
-            return;
-        }
-
-        if (fechaFin.Date < fechaInicio.Date)
-        {
-            mensaje = "La fecha de fin no puede ser anterior a la fecha de inicio.";
-            return;
-        }
-
-        DateTime inicioLocal;
-        DateTime finLocal;
-
-        if (tipoSeleccionado == TipoAusencia.Vacaciones)
-        {
-            inicioLocal = fechaInicio.Date;
-            finLocal = fechaFin.Date.AddDays(1);
-        }
-        else
-        {
-            inicioLocal = fechaInicio.Date.Add(horaInicio.TimeOfDay);
-            finLocal = fechaFin.Date.Add(horaFin.TimeOfDay);
-
-            if (finLocal <= inicioLocal)
-            {
-                mensaje = "La fecha y hora de fin deben ser posteriores a las de inicio.";
-                return;
-            }
-        }
-
-        var zonaMadrid = TimeZoneInfo.FindSystemTimeZoneById(
-            "Romance Standard Time");
-
-        var inicioUtc = TimeZoneInfo.ConvertTimeToUtc(
-            DateTime.SpecifyKind(inicioLocal, DateTimeKind.Unspecified),
-            zonaMadrid);
-
-        var finUtc = TimeZoneInfo.ConvertTimeToUtc(
-            DateTime.SpecifyKind(finLocal, DateTimeKind.Unspecified),
-            zonaMadrid);
-
-        var estado = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-
-        var administrador = await UserManager.GetUserAsync(estado.User);
-
-        if (administrador == null)
-        {
-            mensaje = "No se ha podido identificar al usuario que registra la ausencia.";
-            return;
-        }
-
-        Ausencia ausencia;
-
-        if (ausenciaEditandoId.HasValue)
-        {
-            ausencia = await DbContext.Ausencias
-                .FirstOrDefaultAsync(a => a.Id == ausenciaEditandoId.Value);
-
-            if (ausencia == null)
-            {
-                mensaje = "No se ha encontrado la ausencia que deseas modificar.";
-                return;
-            }
-
-            ausencia.UserId = userIdSeleccionado;
-            ausencia.Tipo = tipoSeleccionado;
-            ausencia.FechaInicioUtc = inicioUtc;
-            ausencia.FechaFinUtc = finUtc;
-            ausencia.Observaciones = observaciones;
-        }
-        else
-        {
-            ausencia = new Ausencia
-                {
-                    UserId = userIdSeleccionado,
-                    Tipo = tipoSeleccionado,
-                    FechaInicioUtc = inicioUtc,
-                    FechaFinUtc = finUtc,
-                    Observaciones = observaciones,
-                    UsuarioRegistroId = administrador.Id,
-                    FechaRegistroUtc = DateTime.UtcNow
-                };
-
-            DbContext.Ausencias.Add(ausencia);
-        }
-
-        await DbContext.SaveChangesAsync();
-
-        mensaje = ausenciaEditandoId.HasValue ? "Ausencia modificada correctamente." : "Ausencia registrada correctamente.";
-
-        ausenciaEditandoId = null;
-        await CargarAusencias();
-
-        observaciones = string.Empty;
-        fechaInicio = DateTime.Today;
-        fechaFin = DateTime.Today;
-        horaInicio = DateTime.Today.AddHours(9);
-        horaFin = DateTime.Today.AddHours(14);
     }
 
     private async Task CargarAusencias()
@@ -339,73 +206,114 @@
         return $"{inicio:dd/MM/yyyy HH:mm} - {fin:dd/MM/yyyy HH:mm}";
     }
 
-    private void EditarAusencia(Ausencia ausencia)
+    private async Task AceptarAusencia(int id)
     {
-        ausenciaEditandoId = ausencia.Id;
+        var ausencia = await DbContext.Ausencias
+            .FirstOrDefaultAsync(a =>
+                a.Id == id &&
+                a.Estado == EstadoAusencia.Pendiente);
 
-        userIdSeleccionado = ausencia.UserId;
-        tipoSeleccionado = ausencia.Tipo;
-        observaciones = ausencia.Observaciones;
-
-        var zonaMadrid = TimeZoneInfo.FindSystemTimeZoneById(
-            "Romance Standard Time");
-
-        var inicio = TimeZoneInfo.ConvertTimeFromUtc(
-            DateTime.SpecifyKind(ausencia.FechaInicioUtc, DateTimeKind.Utc),
-            zonaMadrid);
-
-        var fin = TimeZoneInfo.ConvertTimeFromUtc(
-            DateTime.SpecifyKind(ausencia.FechaFinUtc, DateTimeKind.Utc),
-            zonaMadrid);
-
-        fechaInicio = inicio.Date;
-
-        if (ausencia.Tipo == TipoAusencia.Vacaciones)
+        if (ausencia == null)
         {
-            fechaFin = fin.Date.AddDays(-1);
-        }
-        else
-        {
-            fechaFin = fin.Date;
-            horaInicio = inicio;
-            horaFin = fin;
-        }
-    }
-
-    private void CancelarEdicion()
-    {
-        ausenciaEditandoId = null;
-
-        userIdSeleccionado = string.Empty;
-        tipoSeleccionado = TipoAusencia.Vacaciones;
-        fechaInicio = DateTime.Today;
-        fechaFin = DateTime.Today;
-        horaInicio = DateTime.Today.AddHours(9);
-        horaFin = DateTime.Today.AddHours(14);
-        observaciones = string.Empty;
-        mensaje = string.Empty;
-    }
-
-    private async Task EliminarAusencia(Ausencia ausencia)
-    {
-        bool confirmar = await JS.InvokeAsync<bool>(
-            "confirm",
-            $"¿Estás seguro de que deseas eliminar la ausencia de {ausencia.Usuario?.Nombre} {ausencia.Usuario?.Apellidos} ({ausencia.Tipo})?");
-
-        if (!confirmar)
+            NotificacionService.Mostrar(
+                "La solicitud no existe o ya ha sido resuelta.",
+                "warning");
             return;
+        }
 
-        DbContext.Ausencias.Remove(ausencia);
+        var estado = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var administrador = await UserManager.GetUserAsync(estado.User);
+
+        if (administrador == null)
+        {
+            NotificacionService.Mostrar(
+                "No se ha podido identificar al administrador.",
+                "error");
+            return;
+        }
+
+        ausencia.Estado = EstadoAusencia.Aceptada;
+        ausencia.UsuarioResolucionId = administrador.Id;
+        ausencia.FechaResolucionUtc = DateTime.UtcNow;
+        ausencia.MotivoResolucion = null;
 
         await DbContext.SaveChangesAsync();
 
-        if (ausenciaEditandoId == ausencia.Id)
+        await CargarAusencias();
+
+        NotificacionService.Mostrar(
+            "Solicitud de ausencia aceptada correctamente.",
+            "success");
+    }
+
+    private void DenegarAusencia(int id)
+    {
+        ausenciaDenegandoId = id;
+        motivoDenegacion = string.Empty;
+        mostrarFormularioDenegacion = true;
+    }
+
+    private async Task ConfirmarDenegacion()
+    {
+        if (!ausenciaDenegandoId.HasValue)
+            return;
+
+        if (string.IsNullOrWhiteSpace(motivoDenegacion))
         {
-            CancelarEdicion();
+            NotificacionService.Mostrar(
+                "Debes indicar el motivo de la denegación.",
+                "warning");
+            return;
         }
+
+        var ausencia = await DbContext.Ausencias
+            .FirstOrDefaultAsync(a =>
+                a.Id == ausenciaDenegandoId.Value &&
+                a.Estado == EstadoAusencia.Pendiente);
+
+        if (ausencia == null)
+        {
+            NotificacionService.Mostrar(
+                "La solicitud no existe o ya ha sido resuelta.",
+                "warning");
+
+            CancelarDenegacion();
+            return;
+        }
+
+        var estado = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var administrador = await UserManager.GetUserAsync(estado.User);
+
+        if (administrador == null)
+        {
+            NotificacionService.Mostrar(
+                "No se ha podido identificar al administrador.",
+                "error");
+            return;
+        }
+
+        ausencia.Estado = EstadoAusencia.Denegada;
+        ausencia.UsuarioResolucionId = administrador.Id;
+        ausencia.FechaResolucionUtc = DateTime.UtcNow;
+        ausencia.MotivoResolucion = motivoDenegacion.Trim();
+
+        await DbContext.SaveChangesAsync();
+
+        CancelarDenegacion();
 
         await CargarAusencias();
 
-        mensaje = "Ausencia eliminada correctamente.";
+        NotificacionService.Mostrar(
+            "Solicitud de ausencia denegada correctamente.",
+            "success");
     }
+
+    private void CancelarDenegacion()
+    {
+        mostrarFormularioDenegacion = false;
+        ausenciaDenegandoId = null;
+        motivoDenegacion = string.Empty;
+    }
+
+
 }
